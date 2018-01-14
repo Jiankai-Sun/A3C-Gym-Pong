@@ -1,7 +1,14 @@
 # Byte-compiled / optimized / DLL files
+.idea/
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+checkpoints/
+logs/
+bak/
+config.json_bak
+SUNCG/
 
 # C extensions
 *.so
