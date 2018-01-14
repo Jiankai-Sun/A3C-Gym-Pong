@@ -61,6 +61,7 @@ class A3CTrainingThread(object):
     self.sync = self.local_network.sync_from(global_network)
 
     self.env = None
+    self.obs = None
 
     self.local_t = 0
 
@@ -69,6 +70,8 @@ class A3CTrainingThread(object):
     self.episode_reward = 0
     self.episode_length = 0
     self.episode_max_q = -np.inf
+    self.entropy = np.zeros(20)
+
 
   def _local_var_name(self, var):
     return '/'.join(var.name.split('/')[1:])
@@ -112,7 +115,7 @@ class A3CTrainingThread(object):
       # lazy evaluation
       time.sleep(self.thread_index*1.0)
       self.env = gym.make('Pong-v0')
-      self.env.reset()
+      self.obs = self.env.reset()
 
     states = []
     actions = []
@@ -131,10 +134,10 @@ class A3CTrainingThread(object):
 
     # t_max times loop
     for i in range(LOCAL_T_MAX):
-      pi_, value_ = self.local_network.run_policy_and_value(sess, self.env.s_t, self.scopes)
+      pi_, value_ = self.local_network.run_policy_and_value(sess, self.obs, self.scopes)
       action = self.choose_action(pi_)
 
-      states.append(self.env.s_t)
+      states.append(self.obs)
       actions.append(action)
       values.append(value_)
 
@@ -142,11 +145,7 @@ class A3CTrainingThread(object):
         sys.stdout.write("Pi = {0} V = {1}\n".format(pi_, value_))
 
       # process game
-      self.env.step(action)
-
-      # receive game result
-      reward = self.env.reward
-      terminal = self.env.terminal
+      self.obs, reward, terminal, _ = self.env.step(action)
 
       # ad-hoc reward for navigation
       # reward = 10.0 if terminal else -0.01
@@ -162,7 +161,7 @@ class A3CTrainingThread(object):
       self.local_t += 1
 
       # s_t1 -> s_t
-      self.env.update()
+      # self.env.update()
       
       if terminal:
         terminal_end = True
@@ -178,7 +177,9 @@ class A3CTrainingThread(object):
           "episode_reward_input": self.episode_reward,
           "episode_length_input": float(self.episode_length),
           "episode_max_q_input": self.episode_max_q,
-          "learning_rate_input": self._anneal_learning_rate(global_t)
+          "learning_rate_input": self._anneal_learning_rate(global_t),
+          "episode_entropy": self.entropy[0]  # self.entropy here is a np.array([1, 20]) with same
+          # value for each element, don't know why
         }
 
         self._record_score(sess, summary_writer, summary_op, summary_placeholders,
@@ -203,10 +204,9 @@ class A3CTrainingThread(object):
     batch_a = []
     batch_td = []
     batch_R = []
-    batch_t = []
 
     # compute and accmulate gradients
-    for(ai, ri, si, Vi) in zip(actions, rewards, states, values, ):
+    for(ai, ri, si, Vi) in zip(actions, rewards, states, values):
       R = ri + GAMMA * R
       td = R - Vi
       a = np.zeros([ACTION_SIZE])
@@ -217,7 +217,7 @@ class A3CTrainingThread(object):
       batch_td.append(td)
       batch_R.append(R)
 
-    sess.run( self.accum_gradients,
+    _, self.entropy = sess.run([self.accum_gradients, self.local_network.entropy],
               feed_dict = {
                 self.local_network.s: batch_si,
                 self.local_network.a: batch_a,

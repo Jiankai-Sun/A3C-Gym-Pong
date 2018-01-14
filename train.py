@@ -100,11 +100,14 @@ if __name__ == '__main__':
     episode_reward_input = tf.placeholder("float")
     episode_length_input = tf.placeholder("float")
     episode_max_q_input  = tf.placeholder("float")
+    episode_entropy = tf.placeholder("float")
 
     scalar_summaries = [
       tf.summary.scalar(key+"/Episode Reward", episode_reward_input),
       tf.summary.scalar(key+"/Episode Length", episode_length_input),
-      tf.summary.scalar(key+"/Episode Max Q", episode_max_q_input)
+      tf.summary.scalar(key+"/Episode Max Q", episode_max_q_input),
+      tf.summary.scalar(key + "/Learning Rate Input", learning_rate_input),
+      tf.summary.scalar(key + "/Episode Entropy", episode_entropy)
     ]
 
     summary_op[key] = tf.summary.merge(scalar_summaries)
@@ -112,7 +115,8 @@ if __name__ == '__main__':
       "episode_reward_input": episode_reward_input,
       "episode_length_input": episode_length_input,
       "episode_max_q_input": episode_max_q_input,
-      "learning_rate_input": learning_rate_input
+      "learning_rate_input": learning_rate_input,
+      "episode_entropy": episode_entropy
     }
 
   summary_writer = tf.summary.FileWriter(LOG_FILE, sess.graph)

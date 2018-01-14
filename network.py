@@ -29,10 +29,10 @@ class ActorCriticNetwork(object):
       log_pi = tf.log(tf.clip_by_value(self.pi[scope_key], 1e-20, 1.0))
 
       # policy entropy
-      entropy = -tf.reduce_sum(self.pi[scope_key] * log_pi, axis=1)
+      self.entropy = -tf.reduce_sum(self.pi[scope_key] * log_pi, axis=1)
 
       # policy loss (output)
-      policy_loss = - tf.reduce_sum(tf.reduce_sum(tf.multiply(log_pi, self.a), axis=1) * self.td + entropy * entropy_beta)
+      policy_loss = - tf.reduce_sum(tf.reduce_sum(tf.multiply(log_pi, self.a), axis=1) * self.td + self.entropy * entropy_beta)
 
       # R (input for value)
       self.r = tf.placeholder("float", [None])
@@ -109,6 +109,17 @@ class ActorCriticNetwork(object):
     initial = tf.random_uniform(shape, minval=-d, maxval=d)
     return tf.Variable(initial, name=name)
 
+  def _conv_variable(self, weight_shape):
+    w = weight_shape[0]
+    h = weight_shape[1]
+    input_channels = weight_shape[2]
+    output_channels = weight_shape[3]
+    d = 1.0 / np.sqrt(input_channels * w * h)
+    bias_shape = [output_channels]
+    weight = tf.Variable(tf.random_uniform(weight_shape, minval=-d, maxval=d))
+    bias = tf.Variable(tf.random_uniform(bias_shape, minval=-d, maxval=d))
+    return weight, bias
+
   def _conv2d(self, x, W, stride):
     return tf.nn.conv2d(x, W, strides = [1, stride, stride, 1], padding = "VALID")
 
@@ -131,6 +142,15 @@ class ActorCriticFFNetwork(ActorCriticNetwork):
     self.pi = dict()
     self.v = dict()
 
+    self.W_convS1 = dict()
+    self.b_convS1 = dict()
+
+    self.W_convS2 = dict()
+    self.b_convS2 = dict()
+
+    self.W_convS3 = dict()
+    self.b_convS3 = dict()
+
     self.W_fc1 = dict()
     self.b_fc1 = dict()
 
@@ -149,7 +169,7 @@ class ActorCriticFFNetwork(ActorCriticNetwork):
     with tf.device(self._device):
 
       # state (input)
-      self.s = tf.placeholder("float", [None, 2048, 4])
+      self.s = tf.placeholder("float", [None, 210, 160, 3])
 
       # target (input)
       # self.t = tf.placeholder("float", [None, 2048, 4])
@@ -158,13 +178,36 @@ class ActorCriticFFNetwork(ActorCriticNetwork):
         # network key
         key = network_scope
 
+        # Convolution network
+        # Conv 1
+        self.W_convS1[key], self.b_convS1[key] = self._conv_variable([8, 8, 3, 16])  # stride=4
+        # self.W_convT1[key], self.b_convT1[key] = self._conv_variable([8, 8, 4, 16])  # stride=4
+
+        self.S_conv1 = tf.nn.relu(self._conv2d(self.s, self.W_convS1[key], 4) + self.b_convS1[key])
+        # self.T_conv1 = tf.nn.relu(self._conv2d(self.t,  self.W_convT1[key], 4) + self.b_convT1[key])
+
+        # Conv 2
+        self.W_convS2[key], self.b_convS2[key] = self._conv_variable([4, 4, 16, 32])  # stride=2
+        # self.W_convT2[key], self.b_convT2[key] = self._conv_variable([4, 4, 16, 32])  # stride=2
+
+        self.S_conv2 = tf.nn.relu(self._conv2d(self.S_conv1, self.W_convS2[key], 2) + self.b_convS2[key])
+        # self.T_conv2 = tf.nn.relu(self._conv2d(self.T_conv1,  self.W_convT2[key], 2) + self.b_convT2[key])
+
+        # Conv 3
+        self.W_convS3[key], self.b_convS3[key] = self._conv_variable([4, 4, 32, 64])  # stride=2
+        # self.W_convT3[key], self.b_convT3[key] = self._conv_variable([4, 4, 32, 64])  # stride=2
+
+        self.S_conv3 = tf.nn.relu(self._conv2d(self.S_conv2, self.W_convS3[key], 2) + self.b_convS3[key])
+
         # flatten input
-        self.s_flat = tf.reshape(self.s, [-1, 8192])
+        # self.s_flat = tf.reshape(self.S_conv3, [-1, 8192])
+        self.s_flat = tf.reshape(self.S_conv3, [-1, 5632])
+
         # self.t_flat = tf.reshape(self.t, [-1, 8192])
 
         # shared siamese layer
-        self.W_fc1[key] = self._fc_weight_variable([8192, 512])
-        self.b_fc1[key] = self._fc_bias_variable([512], 8192)
+        self.W_fc1[key] = self._fc_weight_variable([5632, 512])
+        self.b_fc1[key] = self._fc_bias_variable([512], 5632)
 
         h_s_flat = tf.nn.relu(tf.matmul(self.s_flat, self.W_fc1[key]) + self.b_fc1[key])
         # h_t_flat = tf.nn.relu(tf.matmul(self.t_flat, self.W_fc1[key]) + self.b_fc1[key])
@@ -172,8 +215,10 @@ class ActorCriticFFNetwork(ActorCriticNetwork):
         h_fc1 = tf.concat(values=[h_s_flat], axis=1)
 
         # shared fusion layer
-        self.W_fc2[key] = self._fc_weight_variable([1024, 512])
-        self.b_fc2[key] = self._fc_bias_variable([512], 1024)
+        # self.W_fc2[key] = self._fc_weight_variable([1024, 512])
+        # self.b_fc2[key] = self._fc_bias_variable([512], 1024)
+        self.W_fc2[key] = self._fc_weight_variable([512, 512])
+        self.b_fc2[key] = self._fc_bias_variable([512], 512)
         h_fc2 = tf.nn.relu(tf.matmul(h_fc1, self.W_fc2[key]) + self.b_fc2[key])
 
         for scene_scope in scene_scopes:
