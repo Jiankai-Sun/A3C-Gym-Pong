@@ -145,7 +145,7 @@ class A3CTrainingThread(object):
         sys.stdout.write("Pi = {0} V = {1}\n".format(pi_, value_))
 
       # process game
-      self.obs, reward, terminal, _ = self.env.step(action)
+      self.obs, reward, terminal, info = self.env.step(action)
 
       # ad-hoc reward for navigation
       # reward = 10.0 if terminal else -0.01
@@ -187,13 +187,13 @@ class A3CTrainingThread(object):
         self.episode_reward = 0
         self.episode_length = 0
         self.episode_max_q = -np.inf
-        self.env.reset()
+        self.obs = self.env.reset()
 
         break
 
     R = 0.0
     if not terminal_end:
-      R = self.local_network.run_value(sess, self.env.s_t, self.scopes)
+      R = self.local_network.run_value(sess, self.obs, self.scopes)
 
     actions.reverse()
     states.reverse()
