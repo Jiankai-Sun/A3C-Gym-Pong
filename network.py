@@ -360,16 +360,16 @@ class ActorCriticLSTMNetwork(ActorCriticNetwork):
         self.b_fc1[key] = self._fc_bias_variable([512], 5632)
 
         h_s_flat = tf.nn.relu(tf.matmul(self.s_flat, self.W_fc1[key]) + self.b_fc1[key])
-        # h_t_flat = tf.nn.relu(tf.matmul(self.t_flat, self.W_fc1[key]) + self.b_fc1[key])
+
+        h_s_reshaped = tf.reshape(h_s_flat, [1, -1, 512])
+
         # h_fc1 = tf.concat(values=[h_s_flat, h_t_flat], axis=1)
-        h_fc1 = tf.concat(values=[h_s_flat], axis=1)
+        # h_fc1 = tf.concat(values=[h_s_flat], axis=1)
 
         # shared fusion layer
-        # self.W_fc2[key] = self._fc_weight_variable([1024, 512])
-        # self.b_fc2[key] = self._fc_bias_variable([512], 1024)
-        self.W_fc2[key] = self._fc_weight_variable([512, 512])
-        self.b_fc2[key] = self._fc_bias_variable([512], 512)
-        h_fc2 = tf.nn.relu(tf.matmul(h_fc1, self.W_fc2[key]) + self.b_fc2[key])
+        # self.W_fc2[key] = self._fc_weight_variable([512, 512])
+        # self.b_fc2[key] = self._fc_bias_variable([512], 512)
+        # h_fc2 = tf.nn.relu(tf.matmul(h_fc1, self.W_fc2[key]) + self.b_fc2[key])
 
         for scene_scope in scene_scopes:
           # scene-specific key
@@ -378,18 +378,18 @@ class ActorCriticLSTMNetwork(ActorCriticNetwork):
           with tf.variable_scope(scene_scope):
 
             # scene-specific adaptation layer
-            self.W_fc3[key] = self._fc_weight_variable([512, 512])
-            self.b_fc3[key] = self._fc_bias_variable([512], 512)
-            h_fc3 = tf.nn.relu(tf.matmul(h_fc2, self.W_fc3[key]) + self.b_fc3[key])
+            # self.W_fc3[key] = self._fc_weight_variable([512, 512])
+            # self.b_fc3[key] = self._fc_bias_variable([512], 512)
+            # h_fc3 = tf.nn.relu(tf.matmul(h_fc2, self.W_fc3[key]) + self.b_fc3[key])
 
             # lstm
-            self.lstm = tf.contrib.rnn.BasicLSTMCell(256, state_is_tuple=True)
+            self.lstm = tf.contrib.rnn.BasicLSTMCell(512, state_is_tuple=True)
 
             # place holder for LSTM unrolling time step size.
             self.step_size = tf.placeholder(tf.float32, [1])
 
-            self.initial_lstm_state0 = tf.placeholder(tf.float32, [1, 256])
-            self.initial_lstm_state1 = tf.placeholder(tf.float32, [1, 256])
+            self.initial_lstm_state0 = tf.placeholder(tf.float32, [1, 512])
+            self.initial_lstm_state1 = tf.placeholder(tf.float32, [1, 512])
             self.initial_lstm_state = tf.contrib.rnn.LSTMStateTuple(self.initial_lstm_state0,
                                                                     self.initial_lstm_state1)
 
@@ -399,12 +399,12 @@ class ActorCriticLSTMNetwork(ActorCriticNetwork):
             # When forward propagating, step_size is 1.
             # (time_major = False, so output shape is [batch_size, max_time, cell.output_size])
             lstm_outputs, self.lstm_state = tf.nn.dynamic_rnn(self.lstm,
-                                                              h_fc3,
+                                                              h_s_reshaped,
                                                               initial_state=self.initial_lstm_state,
                                                               sequence_length=self.step_size,
                                                               time_major=False)
 
-            lstm_outputs = tf.reshape(lstm_outputs, [-1, 256])
+            lstm_outputs = tf.reshape(lstm_outputs, [-1, 512])
 
             # weight for policy output layer
             self.W_policy[key] = self._fc_weight_variable([512, action_size])
@@ -425,8 +425,8 @@ class ActorCriticLSTMNetwork(ActorCriticNetwork):
             self.reset_state()
 
   def reset_state(self):
-    self.lstm_state_out = tf.contrib.rnn.LSTMStateTuple(np.zeros([1, 256]),
-                                                        np.zeros([1, 256]))
+    self.lstm_state_out = tf.contrib.rnn.LSTMStateTuple(np.zeros([1, 512]),
+                                                        np.zeros([1, 512]))
 
   def run_policy_and_value(self, sess, state, scopes):
     k = self._get_key(scopes[:2])

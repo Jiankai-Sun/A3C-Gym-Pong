@@ -236,14 +236,25 @@ class A3CTrainingThread(object):
       batch_td.reverse()
       batch_R.reverse()
 
-      sess.run(self.apply_gradients,
+      _, self.entropy = sess.run([self.apply_gradients,self.local_network.entropy],
                feed_dict={
                  self.local_network.s: batch_si,
                  self.local_network.a: batch_a,
                  self.local_network.td: batch_td,
                  self.local_network.r: batch_R,
                  self.local_network.initial_lstm_state: start_lstm_state,
-                 self.local_network.step_size: [len(batch_a)]})
+                 self.local_network.step_size: [len(batch_a)],
+                 self.learning_rate_input: cur_learning_rate
+               })
+      # _, self.entropy = sess.run([self.accum_gradients, self.local_network.entropy],
+      #                            feed_dict={
+      #                              self.local_network.s: batch_si,
+      #                              self.local_network.a: batch_a,
+      #                              self.local_network.td: batch_td,
+      #                              self.local_network.r: batch_R,
+      #                              self.local_network.step_size: [len(batch_a)]
+      #                            })
+
     else:
       _, self.entropy = sess.run([self.accum_gradients, self.local_network.entropy],
                                  feed_dict={
@@ -252,8 +263,8 @@ class A3CTrainingThread(object):
                                    self.local_network.td: batch_td,
                                    self.local_network.r: batch_R})
 
-    sess.run( self.apply_gradients,
-              feed_dict = { self.learning_rate_input: cur_learning_rate } )
+      sess.run( self.apply_gradients,
+                feed_dict = { self.learning_rate_input: cur_learning_rate } )
 
     if VERBOSE and (self.thread_index == 0) and (self.local_t % 100) == 0:
       sys.stdout.write("Local timestep %d\n" % self.local_t)
