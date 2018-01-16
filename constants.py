@@ -33,3 +33,5 @@ TASK_LIST = {
   'kitchen_02'     : ['90', '136', '157', '207', '329'],
   'living_room_08' : ['92', '135', '193', '228', '254']
 }
+
+USE_LSTM = True # True for A3C LSTM, False for A3C FF
